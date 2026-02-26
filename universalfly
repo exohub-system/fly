@@ -1,0 +1,332 @@
+-- EXO HUB | Fly — Draggable
+local Players = game:GetService("Players")
+local RunService = game:GetService("RunService")
+local UIS = game:GetService("UserInputService")
+local TweenService = game:GetService("TweenService")
+local player = Players.LocalPlayer
+local nowe = false
+local tpwalking = false
+local speeds = 1
+
+local function startTpWalking()
+    tpwalking = false
+    for i = 1, speeds do
+        spawn(function()
+            local hb = RunService.Heartbeat
+            tpwalking = true
+            local chr = player.Character
+            local hum = chr and chr:FindFirstChildWhichIsA("Humanoid")
+            while tpwalking and hb:Wait() and chr and hum and hum.Parent do
+                if hum.MoveDirection.Magnitude > 0 then
+                    chr:TranslateBy(hum.MoveDirection)
+                end
+            end
+        end)
+    end
+end
+
+local function disableStates(hum)
+    for _, s in pairs(Enum.HumanoidStateType:GetEnumItems()) do
+        pcall(function() hum:SetStateEnabled(s, false) end)
+    end
+    hum:ChangeState(Enum.HumanoidStateType.Swimming)
+end
+
+local function enableStates(hum)
+    for _, s in pairs(Enum.HumanoidStateType:GetEnumItems()) do
+        pcall(function() hum:SetStateEnabled(s, true) end)
+    end
+    hum:ChangeState(Enum.HumanoidStateType.RunningNoPhysics)
+end
+
+local function startFly()
+    local char = player.Character
+    if not char then return end
+    local hum = char:FindFirstChildWhichIsA("Humanoid")
+    if not hum then return end
+    local isR6 = hum.RigType == Enum.HumanoidRigType.R6
+    local torso = isR6 and char:FindFirstChild("Torso") or char:FindFirstChild("UpperTorso")
+    if not torso then return end
+
+    char.Animate.Disabled = true
+    for _, t in pairs(hum:GetPlayingAnimationTracks()) do t:AdjustSpeed(0) end
+    disableStates(hum)
+    startTpWalking()
+    hum.PlatformStand = true
+
+    local bg = Instance.new("BodyGyro", torso)
+    bg.P = 9e4
+    bg.maxTorque = Vector3.new(9e9,9e9,9e9)
+    bg.cframe = torso.CFrame
+
+    local bv = Instance.new("BodyVelocity", torso)
+    bv.velocity = Vector3.new(0,0.1,0)
+    bv.maxForce = Vector3.new(9e9,9e9,9e9)
+
+    local ctrl = {f=0,b=0,l=0,r=0}
+    local lastctrl = {f=0,b=0,l=0,r=0}
+    local maxspeed = 50
+    local spd = 0
+    local conn
+
+    conn = RunService.RenderStepped:Connect(function()
+        if not nowe then
+            conn:Disconnect()
+            bg:Destroy()
+            bv:Destroy()
+            hum.PlatformStand = false
+            char.Animate.Disabled = false
+            tpwalking = false
+            enableStates(hum)
+            return
+        end
+        ctrl.f = UIS:IsKeyDown(Enum.KeyCode.W) and 1 or 0
+        ctrl.b = UIS:IsKeyDown(Enum.KeyCode.S) and -1 or 0
+        ctrl.l = UIS:IsKeyDown(Enum.KeyCode.A) and -1 or 0
+        ctrl.r = UIS:IsKeyDown(Enum.KeyCode.D) and 1 or 0
+        if ctrl.l+ctrl.r ~= 0 or ctrl.f+ctrl.b ~= 0 then
+            spd = math.min(spd+0.5+(spd/maxspeed), maxspeed)
+        else
+            spd = math.max(spd-1, 0)
+        end
+        local cam = workspace.CurrentCamera.CoordinateFrame
+        if (ctrl.l+ctrl.r) ~= 0 or (ctrl.f+ctrl.b) ~= 0 then
+            bv.velocity = ((cam.lookVector*(ctrl.f+ctrl.b))+((cam*CFrame.new(ctrl.l+ctrl.r,(ctrl.f+ctrl.b)*.2,0).p)-cam.p))*spd
+            lastctrl = {f=ctrl.f,b=ctrl.b,l=ctrl.l,r=ctrl.r}
+        elseif spd ~= 0 then
+            bv.velocity = ((cam.lookVector*(lastctrl.f+lastctrl.b))+((cam*CFrame.new(lastctrl.l+lastctrl.r,(lastctrl.f+lastctrl.b)*.2,0).p)-cam.p))*spd
+        else
+            bv.velocity = Vector3.new(0,0,0)
+        end
+        bg.cframe = cam*CFrame.Angles(-math.rad((ctrl.f+ctrl.b)*50*spd/maxspeed),0,0)
+    end)
+end
+
+-- GUI
+local gui = Instance.new("ScreenGui", player.PlayerGui)
+gui.ResetOnSpawn = false
+gui.Name = "ExoFly"
+
+local frame = Instance.new("Frame", gui)
+frame.Size = UDim2.new(0, 200, 0, 140)
+frame.Position = UDim2.new(0, 10, 0.5, -70)
+frame.BackgroundColor3 = Color3.fromRGB(8, 4, 18)
+frame.BorderSizePixel = 0
+frame.Active = true
+Instance.new("UICorner", frame).CornerRadius = UDim.new(0, 12)
+
+local stroke = Instance.new("UIStroke", frame)
+stroke.Color = Color3.fromRGB(120, 80, 255)
+stroke.Thickness = 1.5
+
+-- Drag bar at top
+local dragBar = Instance.new("Frame", frame)
+dragBar.Size = UDim2.new(1, 0, 0, 32)
+dragBar.BackgroundColor3 = Color3.fromRGB(120, 80, 255)
+dragBar.BackgroundTransparency = 0.85
+dragBar.BorderSizePixel = 0
+Instance.new("UICorner", dragBar).CornerRadius = UDim.new(0, 12)
+
+local title = Instance.new("TextLabel", dragBar)
+title.Size = UDim2.new(1, -10, 1, 0)
+title.Position = UDim2.new(0, 10, 0, 0)
+title.BackgroundTransparency = 1
+title.Text = "✦ EXO HUB  |  FLY"
+title.TextColor3 = Color3.fromRGB(160, 120, 255)
+title.TextSize = 12
+title.Font = Enum.Font.GothamBold
+title.TextXAlignment = Enum.TextXAlignment.Left
+
+local div = Instance.new("Frame", frame)
+div.Size = UDim2.new(1, -20, 0, 1)
+div.Position = UDim2.new(0, 10, 0, 32)
+div.BackgroundColor3 = Color3.fromRGB(120, 80, 255)
+div.BackgroundTransparency = 0.6
+div.BorderSizePixel = 0
+
+-- Toggle
+local toggleBtn = Instance.new("TextButton", frame)
+toggleBtn.Size = UDim2.new(1, -20, 0, 30)
+toggleBtn.Position = UDim2.new(0, 10, 0, 40)
+toggleBtn.BackgroundColor3 = Color3.fromRGB(30, 15, 60)
+toggleBtn.Text = "FLY  —  OFF"
+toggleBtn.TextColor3 = Color3.fromRGB(160, 120, 255)
+toggleBtn.TextSize = 12
+toggleBtn.Font = Enum.Font.GothamBold
+toggleBtn.BorderSizePixel = 0
+Instance.new("UICorner", toggleBtn).CornerRadius = UDim.new(0, 8)
+Instance.new("UIStroke", toggleBtn).Color = Color3.fromRGB(120, 80, 255)
+
+-- Speed label
+local speedLabel = Instance.new("TextLabel", frame)
+speedLabel.Size = UDim2.new(1, -20, 0, 16)
+speedLabel.Position = UDim2.new(0, 10, 0, 78)
+speedLabel.BackgroundTransparency = 1
+speedLabel.Text = "SPEED  ·  1"
+speedLabel.TextColor3 = Color3.fromRGB(100, 70, 180)
+speedLabel.TextSize = 9
+speedLabel.Font = Enum.Font.GothamMedium
+speedLabel.TextXAlignment = Enum.TextXAlignment.Left
+
+-- Minus
+local minusBtn = Instance.new("TextButton", frame)
+minusBtn.Size = UDim2.new(0, 32, 0, 24)
+minusBtn.Position = UDim2.new(0, 10, 0, 98)
+minusBtn.BackgroundColor3 = Color3.fromRGB(30, 15, 60)
+minusBtn.Text = "−"
+minusBtn.TextColor3 = Color3.fromRGB(160, 120, 255)
+minusBtn.TextSize = 16
+minusBtn.Font = Enum.Font.GothamBold
+minusBtn.BorderSizePixel = 0
+Instance.new("UICorner", minusBtn).CornerRadius = UDim.new(0, 6)
+
+-- Plus
+local plusBtn = Instance.new("TextButton", frame)
+plusBtn.Size = UDim2.new(0, 32, 0, 24)
+plusBtn.Position = UDim2.new(1, -42, 0, 98)
+plusBtn.BackgroundColor3 = Color3.fromRGB(30, 15, 60)
+plusBtn.Text = "+"
+plusBtn.TextColor3 = Color3.fromRGB(160, 120, 255)
+plusBtn.TextSize = 16
+plusBtn.Font = Enum.Font.GothamBold
+plusBtn.BorderSizePixel = 0
+Instance.new("UICorner", plusBtn).CornerRadius = UDim.new(0, 6)
+
+-- Up
+local upBtn = Instance.new("TextButton", frame)
+upBtn.Size = UDim2.new(0, 54, 0, 24)
+upBtn.Position = UDim2.new(0.5, -58, 0, 98)
+upBtn.BackgroundColor3 = Color3.fromRGB(30, 15, 60)
+upBtn.Text = "▲ UP"
+upBtn.TextColor3 = Color3.fromRGB(160, 120, 255)
+upBtn.TextSize = 10
+upBtn.Font = Enum.Font.GothamBold
+upBtn.BorderSizePixel = 0
+Instance.new("UICorner", upBtn).CornerRadius = UDim.new(0, 6)
+
+-- Down
+local downBtn = Instance.new("TextButton", frame)
+downBtn.Size = UDim2.new(0, 54, 0, 24)
+downBtn.Position = UDim2.new(0.5, 4, 0, 98)
+downBtn.BackgroundColor3 = Color3.fromRGB(30, 15, 60)
+downBtn.Text = "▼ DN"
+downBtn.TextColor3 = Color3.fromRGB(160, 120, 255)
+downBtn.TextSize = 10
+downBtn.Font = Enum.Font.GothamBold
+downBtn.BorderSizePixel = 0
+Instance.new("UICorner", downBtn).CornerRadius = UDim.new(0, 6)
+
+-- ╔══════════════════╗
+--   DRAGGING
+--   Drag from the top bar
+-- ╚══════════════════╝
+
+local dragging = false
+local dragStart = nil
+local startPos = nil
+
+dragBar.InputBegan:Connect(function(input)
+    if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
+        dragging = true
+        dragStart = input.Position
+        startPos = frame.Position
+        input.Changed:Connect(function()
+            if input.UserInputState == Enum.UserInputState.End then
+                dragging = false
+            end
+        end)
+    end
+end)
+
+UIS.InputChanged:Connect(function(input)
+    if dragging and (input.UserInputType == Enum.UserInputType.MouseMovement or input.UserInputType == Enum.UserInputType.Touch) then
+        local delta = input.Position - dragStart
+        frame.Position = UDim2.new(
+            startPos.X.Scale,
+            startPos.X.Offset + delta.X,
+            startPos.Y.Scale,
+            startPos.Y.Offset + delta.Y
+        )
+    end
+end)
+
+-- ╔══════════════════╗
+--   BUTTON LOGIC
+-- ╚══════════════════╝
+
+toggleBtn.MouseButton1Click:Connect(function()
+    nowe = not nowe
+    if nowe then
+        toggleBtn.Text = "FLY  —  ON ✓"
+        toggleBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
+        TweenService:Create(toggleBtn, TweenInfo.new(0.2), {BackgroundColor3 = Color3.fromRGB(120, 80, 255)}):Play()
+        TweenService:Create(stroke, TweenInfo.new(0.2), {Color = Color3.fromRGB(180, 140, 255)}):Play()
+        startFly()
+    else
+        toggleBtn.Text = "FLY  —  OFF"
+        toggleBtn.TextColor3 = Color3.fromRGB(160, 120, 255)
+        TweenService:Create(toggleBtn, TweenInfo.new(0.2), {BackgroundColor3 = Color3.fromRGB(30, 15, 60)}):Play()
+        TweenService:Create(stroke, TweenInfo.new(0.2), {Color = Color3.fromRGB(120, 80, 255)}):Play()
+    end
+end)
+
+minusBtn.MouseButton1Click:Connect(function()
+    if speeds > 1 then
+        speeds = speeds - 1
+        speedLabel.Text = "SPEED  ·  " .. speeds
+        if nowe then tpwalking = false; startTpWalking() end
+    end
+end)
+
+plusBtn.MouseButton1Click:Connect(function()
+    speeds = speeds + 1
+    speedLabel.Text = "SPEED  ·  " .. speeds
+    if nowe then tpwalking = false; startTpWalking() end
+end)
+
+local upHeld, downHeld = false, false
+
+upBtn.MouseButton1Down:Connect(function()
+    upHeld = true
+    while upHeld do
+        local hrp = player.Character and player.Character:FindFirstChild("HumanoidRootPart")
+        if hrp then hrp.CFrame = hrp.CFrame * CFrame.new(0,1,0) end
+        task.wait()
+    end
+end)
+upBtn.MouseButton1Up:Connect(function() upHeld = false end)
+upBtn.MouseLeave:Connect(function() upHeld = false end)
+
+downBtn.MouseButton1Down:Connect(function()
+    downHeld = true
+    while downHeld do
+        local hrp = player.Character and player.Character:FindFirstChild("HumanoidRootPart")
+        if hrp then hrp.CFrame = hrp.CFrame * CFrame.new(0,-1,0) end
+        task.wait()
+    end
+end)
+downBtn.MouseButton1Up:Connect(function() downHeld = false end)
+downBtn.MouseLeave:Connect(function() downHeld = false end)
+
+-- Respawn
+player.CharacterAdded:Connect(function(char)
+    task.wait(0.7)
+    nowe = false
+    tpwalking = false
+    toggleBtn.Text = "FLY  —  OFF"
+    toggleBtn.TextColor3 = Color3.fromRGB(160, 120, 255)
+    toggleBtn.BackgroundColor3 = Color3.fromRGB(30, 15, 60)
+    local hum = char:FindFirstChildWhichIsA("Humanoid")
+    if hum then hum.PlatformStand = false end
+    if char:FindFirstChild("Animate") then char.Animate.Disabled = false end
+end)
+
+-- Pulse
+local t = 0
+RunService.Heartbeat:Connect(function(dt)
+    t = t + dt
+    local pulse = (math.sin(t*3)+1)/2
+    stroke.Transparency = nowe and 0.05*pulse or 0.3+pulse*0.3
+end)
+
+print("[ExoHub] Fly Loaded ✓")
